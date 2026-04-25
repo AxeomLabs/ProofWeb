@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 
 interface AuthContextType {
@@ -71,9 +71,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const impersonate = async (userId: string) => {
-    const docSnap = await doc(db, 'users', userId);
-    // Note: getDoc would be better here but staying consistent with simple data flow
-    setImpersonatedProfile({ uid: userId }); // Simplified for now
+    const docRef = doc(db, 'users', userId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      setImpersonatedProfile({ id: docSnap.id, ...docSnap.data() });
+    } else {
+      console.error("User not found for impersonation");
+    }
   };
 
   const stopImpersonating = () => {
