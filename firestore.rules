@@ -16,10 +16,12 @@ service cloud.firestore {
     match /users/{userId} {
       // Anyone can read user profiles (needed for the public profile page and lists)
       allow read: if true;
-      // Users can only create or update their own profile. Platform admins can update anyone.
       allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isAuthenticated() && (request.auth.uid == userId || getUserRole() == 'platform_admin' || getUserRole() == 'institution_admin');
-      allow delete: if isAuthenticated() && (request.auth.uid == userId || getUserRole() == 'platform_admin');
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (getUserRole() == 'platform_admin' || getUserRole() == 'institution_admin');
+      
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if isAuthenticated() && getUserRole() == 'platform_admin';
     }
 
     // 2. Achievements Collection

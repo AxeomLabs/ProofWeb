@@ -24,18 +24,26 @@ const PublicProfilePage: React.FC = () => {
         userData = userDoc.data();
         userId = userDoc.id;
       } else {
-        // 2. Fall back to slug lookup in studentProfiles
-        const q = query(collection(db, 'studentProfiles'), where('profileUrlSlug', '==', slug));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const profileDoc = snap.docs[0];
-          profileDocId = profileDoc.id;
-          const profileData = profileDoc.data();
-          userId = (profileData as any).userId;
-          
-          const userDocSnap = await getDoc(doc(db, 'users', userId));
-          if (userDocSnap.exists()) {
-            userData = userDocSnap.data();
+        // 2. Try checking if it's a profileUrlSlug in users
+        const userSlugQuery = await getDocs(query(collection(db, 'users'), where('profileUrlSlug', '==', slug)));
+        if (!userSlugQuery.empty) {
+          const uDoc = userSlugQuery.docs[0];
+          userData = uDoc.data();
+          userId = uDoc.id;
+        } else {
+          // 3. Fall back to slug lookup in studentProfiles
+          const q = query(collection(db, 'studentProfiles'), where('profileUrlSlug', '==', slug));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const profileDoc = snap.docs[0];
+            profileDocId = profileDoc.id;
+            const profileData = profileDoc.data();
+            userId = (profileData as any).userId;
+            
+            const userDocSnap = await getDoc(doc(db, 'users', userId));
+            if (userDocSnap.exists()) {
+              userData = userDocSnap.data();
+            }
           }
         }
       }
