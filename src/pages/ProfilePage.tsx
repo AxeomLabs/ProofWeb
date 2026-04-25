@@ -145,6 +145,10 @@ const ProfilePage: React.FC = () => {
     if (window.confirm('ARE YOU SURE? This will permanently delete your account and all data.')) {
       setLoading(true);
       try {
+        // 1. Delete authentication user first (fails safely if requires recent login)
+        await deleteUser(user);
+
+        // 2. Proceed with removing user datasets safely
         const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', user.uid)));
         for (const d of postsSnap.docs) await deleteDoc(d.ref);
 
@@ -158,10 +162,13 @@ const ProfilePage: React.FC = () => {
         for (const d of reqToSnap.docs) await deleteDoc(d.ref);
 
         await deleteDoc(doc(db, 'users', user.uid));
-        await deleteUser(user);
         navigate('/login');
       } catch (err: any) {
-        alert('Error deleting account: ' + err.message);
+        if (err.code === 'auth/requires-recent-login') {
+          alert('For security reasons, please logout and log back in before deleting your account.');
+        } else {
+          alert('Error deleting account: ' + err.message);
+        }
       }
       setLoading(false);
     }

@@ -11,6 +11,8 @@ const LoginPage: React.FC<{ isSignup?: boolean }> = ({ isSignup }) => {
   const [lastName, setLastName] = useState('');
   const [role, setRole] = useState('student');
   const [error, setError] = useState('');
+  const [showRolePrompt, setShowRolePrompt] = useState(false);
+  const [pendingGoogleUser, setPendingGoogleUser] = useState<any>(null);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,44 +74,57 @@ const LoginPage: React.FC<{ isSignup?: boolean }> = ({ isSignup }) => {
       const userDoc = await getDoc(doc(db, 'users', res.user.uid));
       
       if (!userDoc.exists()) {
-        const displayName = res.user.displayName || '';
-        const nameParts = displayName.split(' ');
-        const finalFirstName = nameParts[0] || 'User';
-        const finalLastName = nameParts.slice(1).join(' ');
-        const emailAddress = res.user.email || '';
-        
-        const slug = finalFirstName.toLowerCase().replace(/[^a-z0-9]/g, '') + 
-                     (finalLastName ? finalLastName.toLowerCase().replace(/[^a-z0-9]/g, '') : '') + 
-                     Math.random().toString(36).substring(2, 6);
+        setPendingGoogleUser(res.user);
+        setShowRolePrompt(true);
+      } else {
+        navigate('/');
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
 
-        const assignedRole = isSignup ? role : 'student';
+  const completeGoogleSetup = async () => {
+    if (!pendingGoogleUser) return;
+    setError('');
+    try {
+      const displayName = pendingGoogleUser.displayName || '';
+      const nameParts = displayName.split(' ');
+      const finalFirstName = nameParts[0] || 'User';
+      const finalLastName = nameParts.slice(1).join(' ');
+      const emailAddress = pendingGoogleUser.email || '';
+      
+      const slug = finalFirstName.toLowerCase().replace(/[^a-z0-9]/g, '') + 
+                   (finalLastName ? finalLastName.toLowerCase().replace(/[^a-z0-9]/g, '') : '') + 
+                   Math.random().toString(36).substring(2, 6);
 
-        await setDoc(doc(db, 'users', res.user.uid), {
-          email: emailAddress,
-          firstName: finalFirstName,
-          lastName: assignedRole === 'institution_admin' ? '' : finalLastName,
-          role: assignedRole,
+      await setDoc(doc(db, 'users', pendingGoogleUser.uid), {
+        email: emailAddress,
+        firstName: finalFirstName,
+        lastName: role === 'institution_admin' ? '' : finalLastName,
+        role: role,
+        createdAt: new Date().toISOString()
+      });
+
+      if (role === 'student') {
+        await setDoc(doc(db, 'studentProfiles', pendingGoogleUser.uid), {
+          userId: pendingGoogleUser.uid,
+          profileUrlSlug: slug,
+          isPublic: true,
+          verificationScore: 0,
           createdAt: new Date().toISOString()
         });
-
-        if (assignedRole === 'student') {
-          await setDoc(doc(db, 'studentProfiles', res.user.uid), {
-            userId: res.user.uid,
-            profileUrlSlug: slug,
-            isPublic: true,
-            verificationScore: 0,
-            createdAt: new Date().toISOString()
-          });
-        } else if (assignedRole === 'institution_admin') {
-          await setDoc(doc(db, 'institutions', res.user.uid), {
-            name: finalFirstName,
-            officialEmail: emailAddress,
-            type: 'organisation',
-            isVerified: false,
-            createdAt: new Date().toISOString()
-          });
-        }
+      } else if (role === 'institution_admin') {
+        await setDoc(doc(db, 'institutions', pendingGoogleUser.uid), {
+          name: finalFirstName,
+          officialEmail: emailAddress,
+          type: 'organisation',
+          isVerified: false,
+          createdAt: new Date().toISOString()
+        });
       }
+      setShowRolePrompt(false);
+      setPendingGoogleUser(null);
       navigate('/');
     } catch (err: any) {
       setError(err.message);
@@ -186,6 +201,28 @@ const LoginPage: React.FC<{ isSignup?: boolean }> = ({ isSignup }) => {
             <>Don't have an account? <Link to="/signup" style={{ color: 'var(--accent-primary)' }}>Sign Up</Link></>
           )}
         </p>
+        {showRolePrompt && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+            <div className="card" style={{ maxWidth: '400px', width: '90%', padding: '2rem', background: 'white' }}>
+              <h3 style={{ marginBottom: '1rem' }}>Complete your profile</h3>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+                Please select your account designation to finish onboarding.
+              </p>
+              
+              <label className="text-small">I am a...</label>
+              <select value={role} onChange={(e) => setRole(e.target.value)} style={{ marginBottom: '1.5rem', width: '100%' }}>
+                <option value="student">Student</option>
+                <option value="teacher">Teacher</option>
+                <option value="institution_admin">Institution / Admin</option>
+                <option value="platform_admin">Platform Admin</option>
+              </select>
+
+              <button onClick={completeGoogleSetup} className="btn-blue" style={{ width: '100%' }}>
+                Complete Registration
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
