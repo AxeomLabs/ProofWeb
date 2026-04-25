@@ -67,17 +67,7 @@ const IndexRoute: React.FC = () => {
   if (loading) return <div className="container mt-4">Loading...</div>;
   if (!user) return <Navigate to="/login" />;
   
-  switch(profile?.role) {
-    case 'platform_admin':
-      return <Navigate to="/admin" />;
-    case 'teacher':
-      return <Navigate to="/teacher" />;
-    case 'institution_admin':
-      return <Navigate to="/institution" />;
-    case 'student':
-    default:
-      return <Navigate to="/profile" />;
-  }
+  return <Navigate to="/feed" />;
 };
 
 const App: React.FC = () => {
