@@ -63,17 +63,19 @@ service cloud.firestore {
 
     // 4. Posts Collection (Community Feed)
     match /posts/{postId} {
-      // Any authenticated user can read the feed
       allow read: if isAuthenticated();
-      // Any authenticated user can post, but they must use their own UID as the authorId
       allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
-      // Any authenticated user can update a post (specifically to add/remove their UID from the likes array)
       allow update: if isAuthenticated();
-      // Only the author or an admin can delete a post
       allow delete: if isAuthenticated() && (
         resource.data.authorId == request.auth.uid || 
         getUserRole() == 'platform_admin'
       );
+    }
+
+    // 5. Student Profiles Collection
+    match /studentProfiles/{profileId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && (profileId == request.auth.uid || getUserRole() == 'platform_admin');
     }
   }
 }
