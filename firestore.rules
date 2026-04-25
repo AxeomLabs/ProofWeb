@@ -31,36 +31,25 @@ service cloud.firestore {
       // Only students can create achievements, and they must set themselves as the owner
       allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid;
       // Students can update their own draft achievements. Authorities can update the status during verification.
-      allow update: if isAuthenticated() && (
-        resource.data.studentId == request.auth.uid || 
-        getUserRole() == 'teacher' || 
-        getUserRole() == 'institution_admin' ||
-        getUserRole() == 'platform_admin'
-      );
+      allow update: if isAuthenticated() && resource.data.studentId == request.auth.uid;
+      allow update: if isAuthenticated() && (getUserRole() == 'teacher' || getUserRole() == 'institution_admin' || getUserRole() == 'platform_admin');
       // Only the owner can delete their achievement
       allow delete: if isAuthenticated() && resource.data.studentId == request.auth.uid;
     }
 
     // 3. Verification Requests Collection
     match /verificationRequests/{requestId} {
-      // Only the student who requested it, the assigned authority, or admins can read the request
-      allow read: if isAuthenticated() && (
-        resource.data.requestedBy == request.auth.uid || 
-        resource.data.requestedTo == request.auth.uid ||
-        getUserRole() == 'platform_admin'
-      );
-      // Students can create requests, ensuring they set themselves as the requester
+      allow read: if isAuthenticated() && resource.data.requestedBy == request.auth.uid;
+      allow read: if isAuthenticated() && resource.data.requestedTo == request.auth.uid;
+      allow read: if isAuthenticated() && getUserRole() == 'platform_admin';
+
       allow create: if isAuthenticated() && request.resource.data.requestedBy == request.auth.uid;
-      // Only the assigned authority or admins can update (approve/reject) the request
-      allow update: if isAuthenticated() && (
-        resource.data.requestedTo == request.auth.uid ||
-        getUserRole() == 'platform_admin'
-      );
-      // Only the requester or admins can delete a request
-      allow delete: if isAuthenticated() && (
-        resource.data.requestedBy == request.auth.uid ||
-        getUserRole() == 'platform_admin'
-      );
+
+      allow update: if isAuthenticated() && resource.data.requestedTo == request.auth.uid;
+      allow update: if isAuthenticated() && getUserRole() == 'platform_admin';
+
+      allow delete: if isAuthenticated() && resource.data.requestedBy == request.auth.uid;
+      allow delete: if isAuthenticated() && getUserRole() == 'platform_admin';
     }
 
     // 4. Posts Collection (Community Feed)
@@ -68,16 +57,15 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
       allow update: if isAuthenticated();
-      allow delete: if isAuthenticated() && (
-        resource.data.authorId == request.auth.uid || 
-        getUserRole() == 'platform_admin'
-      );
+      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      allow delete: if isAuthenticated() && getUserRole() == 'platform_admin';
     }
 
     // 5. Student Profiles Collection
     match /studentProfiles/{profileId} {
       allow read: if true;
-      allow write: if isAuthenticated() && (profileId == request.auth.uid || getUserRole() == 'platform_admin');
+      allow write: if isAuthenticated() && profileId == request.auth.uid;
+      allow write: if isAuthenticated() && getUserRole() == 'platform_admin';
     }
   }
 }
