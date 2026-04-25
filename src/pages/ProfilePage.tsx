@@ -106,31 +106,31 @@ const ProfilePage: React.FC = () => {
 
       await updateDoc(doc(db, 'users', user.uid), updates);
 
-      if (isStudent) {
-        let slugToUse = customSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-        if (!slugToUse) {
-          slugToUse = firstName.toLowerCase().replace(/[^a-z0-9]/g, '') + 
-                      lastName.toLowerCase().replace(/[^a-z0-9]/g, '') + 
-                      Math.random().toString(36).substring(2, 6);
-        }
+      let slugToUse = customSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      if (!slugToUse) {
+        slugToUse = firstName.toLowerCase().replace(/[^a-z0-9]/g, '') + 
+                    (lastName ? lastName.toLowerCase().replace(/[^a-z0-9]/g, '') : '') + 
+                    Math.random().toString(36).substring(2, 6);
+      }
 
-        if (slugToUse !== profile?.profileUrlSlug) {
-          const existingDocs = await getDocs(query(collection(db, 'users'), where('profileUrlSlug', '==', slugToUse)));
-          if (!existingDocs.empty) {
-            alert('Username already taken. Please pick another one!');
-            setLoading(false);
-            return;
-          }
+      if (slugToUse !== profile?.profileUrlSlug) {
+        const existingDocs = await getDocs(query(collection(db, 'users'), where('profileUrlSlug', '==', slugToUse)));
+        if (!existingDocs.empty) {
+          alert('Username already taken. Please pick another one!');
+          setLoading(false);
+          return;
         }
-                     
+      }
+                   
+      await updateDoc(doc(db, 'users', user.uid), { profileUrlSlug: slugToUse });
+      updates.profileUrlSlug = slugToUse;
+
+      if (isStudent) {
         await setDoc(doc(db, 'studentProfiles', user.uid), {
           userId: user.uid,
           profileUrlSlug: slugToUse,
           updatedAt: new Date().toISOString()
         }, { merge: true });
-        
-        await updateDoc(doc(db, 'users', user.uid), { profileUrlSlug: slugToUse });
-        updates.profileUrlSlug = slugToUse;
       }
 
       setIsEditing(false);
@@ -201,39 +201,46 @@ const ProfilePage: React.FC = () => {
                 <input type="text" placeholder="First Name" value={firstName} onChange={e => setFirstName(e.target.value)} required />
                 {!isInst && <input type="text" placeholder="Last Name" value={lastName} onChange={e => setLastName(e.target.value)} required />}
               </div>
+              
               {!isInst && (
-                <>
-                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                    <select value={gender} onChange={e => setGender(e.target.value)}>
-                      <option value="">Gender (Optional)</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Non-binary">Non-binary</option>
-                      <option value="Prefer not to say">Prefer not to say</option>
-                    </select>
-                    {isStudent && (
-                      <select value={institutionId} onChange={e => setInstitutionId(e.target.value)}>
-                        <option value="">Institution (Optional)</option>
-                        {institutions.map(inst => <option key={inst.id} value={inst.id}>{inst.firstName}</option>)}
-                      </select>
-                    )}
-                  </div>
-                  <input type="text" placeholder="Headline (e.g. Software Engineering Student)" value={headline} onChange={e => setHeadline(e.target.value)} />
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                  <select value={gender} onChange={e => setGender(e.target.value)}>
+                    <option value="">Gender (Optional)</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Non-binary">Non-binary</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
                   {isStudent && (
-                    <div style={{ marginTop: '1rem', marginBottom: '1rem' }}>
-                      <label className="text-small" style={{ display: 'block', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
-                        Custom Profile URL Slug
-                      </label>
-                      <input 
-                        type="text" 
-                        placeholder="Enter unique username (e.g., john_doe)" 
-                        value={customSlug} 
-                        onChange={e => setCustomSlug(e.target.value)} 
-                      />
-                    </div>
+                    <select value={institutionId} onChange={e => setInstitutionId(e.target.value)}>
+                      <option value="">Institution (Optional)</option>
+                      {institutions.map(inst => <option key={inst.id} value={inst.id}>{inst.firstName}</option>)}
+                    </select>
                   )}
-                </>
+                </div>
               )}
+
+              {!isInst && (
+                <input 
+                  type="text" 
+                  placeholder="Headline (e.g. Software Engineering Student)" 
+                  value={headline} 
+                  onChange={e => setHeadline(e.target.value)} 
+                  style={{ marginBottom: '1rem' }}
+                />
+              )}
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label className="text-small" style={{ display: 'block', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
+                  Custom Profile URL Slug
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="Enter unique handle (e.g., john_doe)" 
+                  value={customSlug} 
+                  onChange={e => setCustomSlug(e.target.value)} 
+                />
+              </div>
               <textarea placeholder="Bio/Summary" value={bio} onChange={e => setBio(e.target.value)} rows={3} />
               <button type="submit" className="btn-blue mt-2" disabled={loading} style={{ width: '100%' }}>Save Profile</button>
             </form>
@@ -243,6 +250,18 @@ const ProfilePage: React.FC = () => {
               {profile?.headline && <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>{profile.headline}</p>}
               <p className="text-small mt-2" style={{ textTransform: 'capitalize', color: 'var(--text-tertiary)' }}>{profile?.role}</p>
               {profile?.bio && <p style={{ marginTop: '1rem', fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{profile.bio}</p>}
+              
+              <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-primary)' }}>
+                <p className="text-small" style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>Public Profile Link</p>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                  <code style={{ flex: 1, background: 'var(--bg-secondary)', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-primary)', color: 'var(--accent-primary)', wordBreak: 'break-all' }}>
+                    proof.axeomlabs.in/u/{profile?.profileUrlSlug || user.uid}
+                  </code>
+                  <button className="btn-outline" onClick={() => window.open(`/u/${profile?.profileUrlSlug || user.uid}`, '_blank')}>
+                    View
+                  </button>
+                </div>
+              </div>
             </>
           )}
         </div>
