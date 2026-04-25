@@ -47,16 +47,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setRealProfile(data);
             }
           } else {
-            const isNewUser = fbUser.metadata.creationTime && 
-              (new Date().getTime() - new Date(fbUser.metadata.creationTime).getTime() < 120000);
-            
-            if (!isNewUser) {
-              console.warn("User document missing and not a new user. Signing out.");
-              signOut(auth);
-              setRealProfile(null);
-            } else {
-              setRealProfile(null);
-            }
+            // Document doesn't exist. Let onboarding complete safely.
+            setRealProfile(null);
           }
           setLoading(false);
         }, (err) => {
