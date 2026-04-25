@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, updateDoc, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, increment, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 const PublicProfilePage: React.FC = () => {
@@ -14,38 +14,52 @@ const PublicProfilePage: React.FC = () => {
     const fetchProfile = async () => {
       if (!slug) return;
       
-      const q = query(collection(db, 'studentProfiles'), where('profileUrlSlug', '==', slug));
-      const snap = await getDocs(q);
-      
-      if (!snap.empty) {
-        const profileDoc = snap.docs[0];
-        let profileData = { id: profileDoc.id, ...profileDoc.data() };
-        
-        const userId = (profileData as any).userId;
-        const userDocSnap = await getDocs(query(collection(db, 'users'), where('__name__', '==', userId)));
-        if (!userDocSnap.empty) {
-          const userData = userDocSnap.docs[0].data();
-          profileData = { ...profileData, ...userData };
-          setProfile(profileData);
+      let userId = slug;
+      let userData: any = null;
+      let profileDocId: string | null = null;
 
-          // Fetch Institution details if approved
-          if (userData.institutionId && userData.institutionStatus === 'approved') {
-            const instSnap = await getDocs(query(collection(db, 'users'), where('__name__', '==', userData.institutionId)));
-            if (!instSnap.empty) {
-              const instData = instSnap.docs[0].data();
-              setInstitutionName(`${instData.firstName} ${instData.lastName}`);
-            }
+      // 1. Try checking if slug is a direct UID in users
+      const userDoc = await getDoc(doc(db, 'users', slug));
+      if (userDoc.exists()) {
+        userData = userDoc.data();
+        userId = userDoc.id;
+      } else {
+        // 2. Fall back to slug lookup in studentProfiles
+        const q = query(collection(db, 'studentProfiles'), where('profileUrlSlug', '==', slug));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const profileDoc = snap.docs[0];
+          profileDocId = profileDoc.id;
+          const profileData = profileDoc.data();
+          userId = (profileData as any).userId;
+          
+          const userDocSnap = await getDoc(doc(db, 'users', userId));
+          if (userDocSnap.exists()) {
+            userData = userDocSnap.data();
           }
-        } else {
-          setProfile(profileData);
+        }
+      }
+
+      if (userData) {
+        const finalProfile = { id: userId, ...userData };
+        setProfile(finalProfile);
+
+        if (userData.institutionId && userData.institutionStatus === 'approved') {
+          const instSnap = await getDoc(doc(db, 'users', userData.institutionId));
+          if (instSnap.exists()) {
+            const instData = instSnap.data();
+            setInstitutionName(`${instData.firstName} ${instData.lastName}`);
+          }
         }
 
-        // Increment view count
-        await updateDoc(doc(db, 'studentProfiles', profileDoc.id), {
-          viewCount: increment(1)
-        });
+        if (profileDocId) {
+          try {
+            await updateDoc(doc(db, 'studentProfiles', profileDocId), {
+              viewCount: increment(1)
+            });
+          } catch(e) { console.warn("Failed to increment view count", e); }
+        }
 
-        // Fetch Verified Achievements
         const achSnap = await getDocs(query(
           collection(db, 'achievements'), 
           where('studentId', '==', userId), 
@@ -53,6 +67,7 @@ const PublicProfilePage: React.FC = () => {
         ));
         setAchievements(achSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       }
+      
       setLoading(false);
     };
 

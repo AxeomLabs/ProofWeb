@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
 
 const FeedPage: React.FC = () => {
   const { user, profile } = useAuth();
@@ -115,12 +116,12 @@ const FeedPage: React.FC = () => {
           {posts.map(post => (
             <div key={post.id} className="card" style={{ padding: '1rem' }}>
               <div className="flex-between mb-2" style={{ alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Link to={`/u/${post.authorId}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'inherit' }}>
                   <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--accent-primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', fontWeight: 'bold' }}>
                     {post.authorName.charAt(0)}
                   </div>
                   <div>
-                    <p className="text-bold" style={{ fontSize: '0.95rem', lineHeight: '1.2' }}>{post.authorName}</p>
+                    <p className="text-bold" style={{ fontSize: '0.95rem', lineHeight: '1.2', textDecoration: 'underline' }}>{post.authorName}</p>
                     <p className="text-small" style={{ color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
                       {post.authorRole.replace('_', ' ')}
                     </p>
@@ -128,7 +129,7 @@ const FeedPage: React.FC = () => {
                       {new Date(post.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
-                </div>
+                </Link>
               </div>
               
               <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', margin: '1rem 0', color: 'var(--text-primary)' }}>
