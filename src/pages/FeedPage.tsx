@@ -9,14 +9,27 @@ const FeedPage: React.FC = () => {
   const [posts, setPosts] = useState<any[]>([]);
   const [newPost, setNewPost] = useState('');
   const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const usersUnsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const userMap: Record<string, any> = {};
+      snapshot.docs.forEach(d => {
+        userMap[d.id] = d.data();
+      });
+      setUsers(userMap);
+    });
+
+    const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+    const postsUnsubscribe = onSnapshot(postsQuery, (snapshot) => {
       setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      usersUnsubscribe();
+      postsUnsubscribe();
+    };
   }, []);
 
   const handlePost = async (e: React.FormEvent) => {
@@ -113,24 +126,29 @@ const FeedPage: React.FC = () => {
         </div>
 
         <div style={{ display: 'grid', gap: '1rem' }}>
-          {posts.map(post => (
-            <div key={post.id} className="card" style={{ padding: '1rem' }}>
-              <div className="flex-between mb-2" style={{ alignItems: 'flex-start' }}>
-                <Link to={`/u/${post.authorId}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'inherit' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--accent-primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', fontWeight: 'bold' }}>
-                    {post.authorName.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="text-bold" style={{ fontSize: '0.95rem', lineHeight: '1.2', textDecoration: 'underline' }}>{post.authorName}</p>
-                    <p className="text-small" style={{ color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
-                      {post.authorRole.replace('_', ' ')}
-                    </p>
-                    <p className="text-small" style={{ color: 'var(--text-tertiary)' }}>
-                      {new Date(post.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </Link>
-              </div>
+          {posts.map(post => {
+            const author = users[post.authorId] || { firstName: post.authorName, role: post.authorRole };
+            const authorName = author.firstName ? `${author.firstName} ${author.lastName || ''}`.trim() : post.authorName;
+            const authorRole = author.role || post.authorRole;
+
+            return (
+              <div key={post.id} className="card" style={{ padding: '1rem' }}>
+                <div className="flex-between mb-2" style={{ alignItems: 'flex-start' }}>
+                  <Link to={`/u/${author.profileUrlSlug || post.authorId}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'inherit' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--accent-primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', fontWeight: 'bold' }}>
+                      {authorName.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-bold" style={{ fontSize: '0.95rem', lineHeight: '1.2', textDecoration: 'underline' }}>{authorName}</p>
+                      <p className="text-small" style={{ color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+                        {authorRole.replace('_', ' ')}
+                      </p>
+                      <p className="text-small" style={{ color: 'var(--text-tertiary)' }}>
+                        {new Date(post.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </Link>
+                </div>
               
               <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', margin: '1rem 0', color: 'var(--text-primary)' }}>
                 {post.content}
@@ -150,7 +168,8 @@ const FeedPage: React.FC = () => {
                 </button>
               </div>
             </div>
-          ))}
+          );
+          })}
           {posts.length === 0 && <p className="text-center text-small mt-4">No updates yet. Start the conversation!</p>}
         </div>
       </main>
