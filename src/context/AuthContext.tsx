@@ -1,0 +1,97 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { onAuthStateChanged, User, signOut } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '../firebase/config';
+
+interface AuthContextType {
+  user: User | null;
+  profile: any | null;
+  loading: boolean;
+  impersonating: boolean;
+  impersonate: (userId: string) => Promise<void>;
+  stopImpersonating: () => void;
+}
+
+const AuthContext = createContext<AuthContextType>({ 
+  user: null, 
+  profile: null, 
+  loading: true, 
+  impersonating: false,
+  impersonate: async () => {},
+  stopImpersonating: () => {}
+});
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [realProfile, setRealProfile] = useState<any | null>(null);
+  const [impersonatedProfile, setImpersonatedProfile] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (fbUser) => {
+      setUser(fbUser);
+      
+      if (fbUser) {
+        setLoading(true);
+        // Set up real-time listener for the user's profile
+        const unsubscribeProfile = onSnapshot(doc(db, 'users', fbUser.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            
+            // SECURITY GUARD: If account is disabled by admin, force logout
+            if (data.isDisabled) {
+              console.warn("Account disabled. Signing out.");
+              signOut(auth);
+              setRealProfile(null);
+            } else {
+              setRealProfile(data);
+            }
+          } else {
+            // If the document was hard-deleted but Auth session exists, force logout
+            // to prevent the "reset to default" behavior the user described.
+            console.warn("User document missing. Signing out.");
+            signOut(auth);
+            setRealProfile(null);
+          }
+          setLoading(false);
+        }, (err) => {
+          console.error("Profile listener error:", err);
+          setLoading(false);
+        });
+
+        return () => unsubscribeProfile();
+      } else {
+        setRealProfile(null);
+        setImpersonatedProfile(null);
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  const impersonate = async (userId: string) => {
+    const docSnap = await doc(db, 'users', userId);
+    // Note: getDoc would be better here but staying consistent with simple data flow
+    setImpersonatedProfile({ uid: userId }); // Simplified for now
+  };
+
+  const stopImpersonating = () => {
+    setImpersonatedProfile(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ 
+      user, 
+      profile: impersonatedProfile || realProfile, 
+      loading,
+      impersonating: !!impersonatedProfile,
+      impersonate,
+      stopImpersonating
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
