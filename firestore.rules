@@ -7,33 +7,29 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Function to get the user's role
-    function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    // Function to check if the user has a specific role safely
+    function hasRole(role) {
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return isAuthenticated() && exists(userPath) && get(userPath).data.role == role;
     }
 
     // 1. Users Collection
     match /users/{userId} {
-      // Anyone can read user profiles (needed for the public profile page and lists)
       allow read: if true;
       allow create: if isAuthenticated() && request.auth.uid == userId;
       allow update: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isAuthenticated() && (getUserRole() == 'platform_admin' || getUserRole() == 'institution_admin');
+      allow update: if isAuthenticated() && (hasRole('platform_admin') || hasRole('institution_admin'));
       
       allow delete: if isAuthenticated() && request.auth.uid == userId;
-      allow delete: if isAuthenticated() && getUserRole() == 'platform_admin';
+      allow delete: if isAuthenticated() && hasRole('platform_admin');
     }
 
     // 2. Achievements Collection
     match /achievements/{achievementId} {
-      // Anyone can read achievements (for public profiles)
       allow read: if true;
-      // Only students can create achievements, and they must set themselves as the owner
       allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid;
-      // Students can update their own draft achievements. Authorities can update the status during verification.
       allow update: if isAuthenticated() && resource.data.studentId == request.auth.uid;
-      allow update: if isAuthenticated() && (getUserRole() == 'teacher' || getUserRole() == 'institution_admin' || getUserRole() == 'platform_admin');
-      // Only the owner can delete their achievement
+      allow update: if isAuthenticated() && (hasRole('teacher') || hasRole('institution_admin') || hasRole('platform_admin'));
       allow delete: if isAuthenticated() && resource.data.studentId == request.auth.uid;
     }
 
@@ -41,15 +37,15 @@ service cloud.firestore {
     match /verificationRequests/{requestId} {
       allow read: if isAuthenticated() && resource.data.requestedBy == request.auth.uid;
       allow read: if isAuthenticated() && resource.data.requestedTo == request.auth.uid;
-      allow read: if isAuthenticated() && getUserRole() == 'platform_admin';
+      allow read: if isAuthenticated() && hasRole('platform_admin');
 
       allow create: if isAuthenticated() && request.resource.data.requestedBy == request.auth.uid;
 
       allow update: if isAuthenticated() && resource.data.requestedTo == request.auth.uid;
-      allow update: if isAuthenticated() && getUserRole() == 'platform_admin';
+      allow update: if isAuthenticated() && hasRole('platform_admin');
 
       allow delete: if isAuthenticated() && resource.data.requestedBy == request.auth.uid;
-      allow delete: if isAuthenticated() && getUserRole() == 'platform_admin';
+      allow delete: if isAuthenticated() && hasRole('platform_admin');
     }
 
     // 4. Posts Collection (Community Feed)
@@ -58,14 +54,14 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
       allow update: if isAuthenticated();
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
-      allow delete: if isAuthenticated() && getUserRole() == 'platform_admin';
+      allow delete: if isAuthenticated() && hasRole('platform_admin');
     }
 
     // 5. Student Profiles Collection
     match /studentProfiles/{profileId} {
       allow read: if true;
       allow write: if isAuthenticated() && profileId == request.auth.uid;
-      allow write: if isAuthenticated() && getUserRole() == 'platform_admin';
+      allow write: if isAuthenticated() && hasRole('platform_admin');
     }
   }
 }
