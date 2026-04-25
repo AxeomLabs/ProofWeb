@@ -47,11 +47,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setRealProfile(data);
             }
           } else {
-            // If the document was hard-deleted but Auth session exists, force logout
-            // to prevent the "reset to default" behavior the user described.
-            console.warn("User document missing. Signing out.");
-            signOut(auth);
-            setRealProfile(null);
+            const isNewUser = fbUser.metadata.creationTime && 
+              (new Date().getTime() - new Date(fbUser.metadata.creationTime).getTime() < 120000);
+            
+            if (!isNewUser) {
+              console.warn("User document missing and not a new user. Signing out.");
+              signOut(auth);
+              setRealProfile(null);
+            } else {
+              setRealProfile(null);
+            }
           }
           setLoading(false);
         }, (err) => {
