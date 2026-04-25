@@ -18,6 +18,7 @@ const ProfilePage: React.FC = () => {
   const [institutionId, setInstitutionId] = useState('');
   
   const [loading, setLoading] = useState(false);
+  const [customSlug, setCustomSlug] = useState('');
   const [institutions, setInstitutions] = useState<any[]>([]);
 
   // Dashboard States (for student)
@@ -34,6 +35,7 @@ const ProfilePage: React.FC = () => {
       setBio(profile.bio || '');
       setGender(profile.gender || '');
       setInstitutionId(profile.institutionId || '');
+      setCustomSlug(profile.profileUrlSlug || '');
     }
 
     const fetchInstitutions = async () => {
@@ -105,18 +107,30 @@ const ProfilePage: React.FC = () => {
       await updateDoc(doc(db, 'users', user.uid), updates);
 
       if (isStudent) {
-        const slug = profile.profileUrlSlug || 
-                     firstName.toLowerCase().replace(/[^a-z0-9]/g, '') + 
-                     lastName.toLowerCase().replace(/[^a-z0-9]/g, '') + 
-                     Math.random().toString(36).substring(2, 6);
+        let slugToUse = customSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        if (!slugToUse) {
+          slugToUse = firstName.toLowerCase().replace(/[^a-z0-9]/g, '') + 
+                      lastName.toLowerCase().replace(/[^a-z0-9]/g, '') + 
+                      Math.random().toString(36).substring(2, 6);
+        }
+
+        if (slugToUse !== profile?.profileUrlSlug) {
+          const existingDocs = await getDocs(query(collection(db, 'users'), where('profileUrlSlug', '==', slugToUse)));
+          if (!existingDocs.empty) {
+            alert('Username already taken. Please pick another one!');
+            setLoading(false);
+            return;
+          }
+        }
                      
         await setDoc(doc(db, 'studentProfiles', user.uid), {
           userId: user.uid,
-          profileUrlSlug: slug,
+          profileUrlSlug: slugToUse,
           updatedAt: new Date().toISOString()
         }, { merge: true });
         
-        await updateDoc(doc(db, 'users', user.uid), { profileUrlSlug: slug });
+        await updateDoc(doc(db, 'users', user.uid), { profileUrlSlug: slugToUse });
+        updates.profileUrlSlug = slugToUse;
       }
 
       setIsEditing(false);
@@ -205,6 +219,19 @@ const ProfilePage: React.FC = () => {
                     )}
                   </div>
                   <input type="text" placeholder="Headline (e.g. Software Engineering Student)" value={headline} onChange={e => setHeadline(e.target.value)} />
+                  {isStudent && (
+                    <div style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+                      <label className="text-small" style={{ display: 'block', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
+                        Custom Profile URL Slug
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="Enter unique username (e.g., john_doe)" 
+                        value={customSlug} 
+                        onChange={e => setCustomSlug(e.target.value)} 
+                      />
+                    </div>
+                  )}
                 </>
               )}
               <textarea placeholder="Bio/Summary" value={bio} onChange={e => setBio(e.target.value)} rows={3} />
