@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, doc, updateDoc, orderBy, limit, increment } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
+import { sendNotification } from '../utils/notifications';
 
 const InstitutionDashboardPage: React.FC = () => {
   const { user, profile } = useAuth();
@@ -112,7 +113,8 @@ const TrustControlLayer = ({ teachers, queue, onUpdate }: any) => {
     onUpdate();
   };
 
-  const handleAction = async (id: string, achievementId: string, studentId: string, status: 'approved' | 'rejected', note: string) => {
+  const handleAction = async (id: string, achievementId: string, studentId: string, status: 'approved' | 'rejected', achievementTitle: string) => {
+    const note = status === 'approved' ? 'Verified by Institution' : 'Insufficient proof';
     await updateDoc(doc(db, 'verificationRequests', id), {
       status,
       reviewerNote: note,
@@ -123,28 +125,41 @@ const TrustControlLayer = ({ teachers, queue, onUpdate }: any) => {
       verifiedAt: status === 'approved' ? new Date().toISOString() : null
     });
     if (status === 'approved') {
-      await updateDoc(doc(db, 'users', studentId), {
-        verificationScore: increment(10)
+      await updateDoc(doc(db, 'users', studentId), { verificationScore: increment(10) });
+      await sendNotification({
+        userId: studentId,
+        type: 'verification_approved',
+        title: 'Credential Verified ✓',
+        message: `"${achievementTitle}" has been officially verified by your institution.`,
+        meta: { achievementId, achievementTitle },
+      });
+    } else {
+      await sendNotification({
+        userId: studentId,
+        type: 'verification_rejected',
+        title: 'Verification Declined',
+        message: `Your institution declined "${achievementTitle}". Reason: ${note}`,
+        meta: { achievementId, achievementTitle },
       });
     }
     onUpdate();
   };
 
-  const handleRevoke = async (id: string, achievementId: string, studentId: string) => {
-    if (!window.confirm("Are you sure you want to revoke this verification? This will deduct the student's score and mark the achievement as rejected.")) return;
-    
+  const handleRevoke = async (id: string, achievementId: string, studentId: string, achievementTitle: string) => {
+    if (!window.confirm("Revoke this verification? This will deduct the student's score.")) return;
     await updateDoc(doc(db, 'verificationRequests', id), {
       status: 'rejected',
       reviewerNote: 'Revoked by Institution',
       reviewedAt: new Date().toISOString()
     });
-    await updateDoc(doc(db, 'achievements', achievementId), {
-      verificationStatus: 'rejected',
-      verifiedAt: null
-    });
-    // Deduct the score that was previously added
-    await updateDoc(doc(db, 'users', studentId), {
-      verificationScore: increment(-10)
+    await updateDoc(doc(db, 'achievements', achievementId), { verificationStatus: 'rejected', verifiedAt: null });
+    await updateDoc(doc(db, 'users', studentId), { verificationScore: increment(-10) });
+    await sendNotification({
+      userId: studentId,
+      type: 'verification_revoked',
+      title: 'Verification Revoked',
+      message: `Your institution has revoked the verification for "${achievementTitle}".`,
+      meta: { achievementId, achievementTitle },
     });
     onUpdate();
   };
@@ -165,8 +180,8 @@ const TrustControlLayer = ({ teachers, queue, onUpdate }: any) => {
               </div>
               <p className="text-small mt-2">Achievement ID: {v.achievementId}</p>
               <div className="mt-4 flex-between">
-                <button className="btn-blue" style={{ fontSize: '0.8rem', padding: '0.3rem 0.8rem' }} onClick={() => handleAction(v.id, v.achievementId, v.requestedBy, 'approved', 'Verified by Institution')}>Approve & Verify</button>
-                <button className="btn-outline" style={{ fontSize: '0.8rem', padding: '0.3rem 0.8rem', color: 'var(--error)' }} onClick={() => handleAction(v.id, v.achievementId, v.requestedBy, 'rejected', 'Insufficient proof')}>Reject</button>
+                <button className="btn-blue" style={{ fontSize: '0.8rem', padding: '0.3rem 0.8rem' }} onClick={() => handleAction(v.id, v.achievementId, v.requestedBy, 'approved', v.achievementTitle || 'Achievement')}>Approve &amp; Verify</button>
+                <button className="btn-outline" style={{ fontSize: '0.8rem', padding: '0.3rem 0.8rem', color: 'var(--error)' }} onClick={() => handleAction(v.id, v.achievementId, v.requestedBy, 'rejected', v.achievementTitle || 'Achievement')}>Reject</button>
               </div>
             </div>
           )) : <p className="text-small">No pending verifications.</p>}
@@ -187,7 +202,7 @@ const TrustControlLayer = ({ teachers, queue, onUpdate }: any) => {
                   <span className={`badge ${v.status === 'approved' ? 'badge-green' : 'badge-error'}`}>{v.status}</span>
                   {v.status === 'approved' && (
                     <button 
-                      onClick={() => handleRevoke(v.id, v.achievementId, v.requestedBy)} 
+                      onClick={() => handleRevoke(v.id, v.achievementId, v.requestedBy, v.achievementTitle)} 
                       className="btn-outline" 
                       style={{ fontSize: '0.7rem', color: 'var(--error)', padding: '2px 6px' }}
                     >
@@ -229,15 +244,33 @@ const TrustControlLayer = ({ teachers, queue, onUpdate }: any) => {
 
 // --- Lifecycle Layer ---
 const LifecycleLayer = ({ students, onUpdate }: any) => {
+  const { user } = useAuth();
   const pending = students.filter((s:any) => s.institutionStatus === 'pending');
   const approved = students.filter((s:any) => s.institutionStatus === 'approved');
 
-  const handleStatusChange = async (studentId: string, newStatus: string) => {
+  const handleStatusChange = async (studentId: string, studentName: string, institutionId: string, newStatus: string) => {
     try {
-      const updateData = newStatus === 'none' 
-        ? { institutionId: '', institutionStatus: 'none' } 
+      const updateData = newStatus === 'none'
+        ? { institutionId: '', institutionStatus: 'none' }
         : { institutionStatus: newStatus };
       await updateDoc(doc(db, 'users', studentId), updateData);
+      if (newStatus === 'approved') {
+        await sendNotification({
+          userId: studentId,
+          type: 'institution_approved',
+          title: 'Institution Membership Approved',
+          message: `Your affiliation request has been approved. You are now a member of the institution.`,
+          meta: { institutionId },
+        });
+      } else if (newStatus === 'none') {
+        await sendNotification({
+          userId: studentId,
+          type: 'institution_rejected',
+          title: 'Institution Request Declined',
+          message: `Your affiliation request was not approved by the institution.`,
+          meta: { institutionId },
+        });
+      }
       onUpdate();
     } catch (err) {
       console.error(err);
@@ -259,8 +292,8 @@ const LifecycleLayer = ({ students, onUpdate }: any) => {
                 <p className="text-small">{s.email}</p>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => handleStatusChange(s.id, 'approved')} className="btn-blue" style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}>Approve</button>
-                <button onClick={() => handleStatusChange(s.id, 'none')} className="btn-outline" style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem', color: 'var(--error)' }}>Reject</button>
+                <button onClick={() => handleStatusChange(s.id, s.firstName, user?.uid || '', 'approved')} className="btn-blue" style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}>Approve</button>
+                <button onClick={() => handleStatusChange(s.id, s.firstName, user?.uid || '', 'none')} className="btn-outline" style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem', color: 'var(--error)' }}>Reject</button>
               </div>
             </div>
           ))}
@@ -291,7 +324,7 @@ const LifecycleLayer = ({ students, onUpdate }: any) => {
                   </span>
                 </td>
                 <td style={{ padding: '1rem' }}>
-                  <button onClick={() => handleStatusChange(s.id, 'none')} className="btn-outline" style={{ fontSize: '0.7rem', color: 'var(--error)' }}>Remove</button>
+                  <button onClick={() => handleStatusChange(s.id, s.firstName, '', 'none')} className="btn-outline" style={{ fontSize: '0.7rem', color: 'var(--error)' }}>Remove</button>
                 </td>
               </tr>
             ))}

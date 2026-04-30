@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, orderBy, Timestamp, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, increment } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
+import { sendNotification } from '../utils/notifications';
 
 const TeacherDashboardPage: React.FC = () => {
   const { user, profile } = useAuth();
@@ -58,7 +59,8 @@ const TeacherDashboardPage: React.FC = () => {
 
 // --- Verification Layer ---
 const VerificationLayer = ({ queue, onUpdate }: any) => {
-  const handleAction = async (id: string, achievementId: string, studentId: string, status: 'approved' | 'rejected', note: string) => {
+  const handleAction = async (id: string, achievementId: string, studentId: string, status: 'approved' | 'rejected', achievementTitle: string) => {
+    const note = status === 'approved' ? 'Verified by Teacher' : 'Insufficient proof';
     await updateDoc(doc(db, 'verificationRequests', id), {
       status,
       reviewerNote: note,
@@ -69,28 +71,41 @@ const VerificationLayer = ({ queue, onUpdate }: any) => {
       verifiedAt: status === 'approved' ? new Date().toISOString() : null
     });
     if (status === 'approved') {
-      await updateDoc(doc(db, 'users', studentId), {
-        verificationScore: increment(10)
+      await updateDoc(doc(db, 'users', studentId), { verificationScore: increment(10) });
+      await sendNotification({
+        userId: studentId,
+        type: 'verification_approved',
+        title: 'Credential Verified ✓',
+        message: `"${achievementTitle}" has been approved and verified by a researcher.`,
+        meta: { achievementId, achievementTitle },
+      });
+    } else {
+      await sendNotification({
+        userId: studentId,
+        type: 'verification_rejected',
+        title: 'Verification Declined',
+        message: `"${achievementTitle}" was rejected. Reason: ${note}`,
+        meta: { achievementId, achievementTitle },
       });
     }
     onUpdate();
   };
 
-  const handleRevoke = async (id: string, achievementId: string, studentId: string) => {
-    if (!window.confirm("Are you sure you want to revoke this verification? This will deduct the student's score and mark the achievement as rejected.")) return;
-    
+  const handleRevoke = async (id: string, achievementId: string, studentId: string, achievementTitle: string) => {
+    if (!window.confirm("Are you sure you want to revoke this verification? This will deduct the student's score.")) return;
     await updateDoc(doc(db, 'verificationRequests', id), {
       status: 'rejected',
       reviewerNote: 'Revoked by Teacher',
       reviewedAt: new Date().toISOString()
     });
-    await updateDoc(doc(db, 'achievements', achievementId), {
-      verificationStatus: 'rejected',
-      verifiedAt: null
-    });
-    // Deduct the score that was previously added
-    await updateDoc(doc(db, 'users', studentId), {
-      verificationScore: increment(-10)
+    await updateDoc(doc(db, 'achievements', achievementId), { verificationStatus: 'rejected', verifiedAt: null });
+    await updateDoc(doc(db, 'users', studentId), { verificationScore: increment(-10) });
+    await sendNotification({
+      userId: studentId,
+      type: 'verification_revoked',
+      title: 'Verification Revoked',
+      message: `Your verification for "${achievementTitle}" has been revoked by the researcher.`,
+      meta: { achievementId, achievementTitle },
     });
     onUpdate();
   };
@@ -110,8 +125,8 @@ const VerificationLayer = ({ queue, onUpdate }: any) => {
             </div>
             <p className="text-small mt-2">Achievement ID: {v.achievementId}</p>
             <div className="mt-4 flex-between">
-              <button className="btn-blue" onClick={() => handleAction(v.id, v.achievementId, v.requestedBy, 'approved', 'Verified by Teacher')}>Approve</button>
-              <button className="btn-outline" style={{ color: 'var(--error)' }} onClick={() => handleAction(v.id, v.achievementId, v.requestedBy, 'rejected', 'Insufficient proof')}>Reject</button>
+              <button className="btn-blue" onClick={() => handleAction(v.id, v.achievementId, v.requestedBy, 'approved', v.achievementTitle)}>Approve</button>
+              <button className="btn-outline" style={{ color: 'var(--error)' }} onClick={() => handleAction(v.id, v.achievementId, v.requestedBy, 'rejected', v.achievementTitle)}>Reject</button>
             </div>
           </div>
         )) : <p>No pending verifications.</p>}
@@ -131,7 +146,7 @@ const VerificationLayer = ({ queue, onUpdate }: any) => {
                   <span className={`badge ${v.status === 'approved' ? 'badge-green' : 'badge-error'}`}>{v.status}</span>
                   {v.status === 'approved' && (
                     <button 
-                      onClick={() => handleRevoke(v.id, v.achievementId, v.requestedBy)} 
+                      onClick={() => handleRevoke(v.id, v.achievementId, v.requestedBy, v.achievementTitle)} 
                       className="btn-outline" 
                       style={{ fontSize: '0.7rem', color: 'var(--error)', padding: '2px 6px' }}
                     >

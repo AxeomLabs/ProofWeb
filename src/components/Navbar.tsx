@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { LogOut, Shield, Building, Award, Newspaper, User } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 
 const Navbar: React.FC = () => {
   const { user, profile } = useAuth();
@@ -69,7 +70,11 @@ const Navbar: React.FC = () => {
                 </Link>
               )}
 
-              <div style={{ width: '1px', height: '24px', background: 'var(--border-primary)', margin: '0 8px' }} />
+              <div style={{ width: '1px', height: '24px', background: 'var(--border-primary)', margin: '0 4px' }} />
+
+              <NotificationBell />
+
+              <div style={{ width: '1px', height: '24px', background: 'var(--border-primary)', margin: '0 4px' }} />
 
               <button onClick={handleLogout} className="btn-ghost" style={{ fontSize: '13px' }}>
                 <LogOut size={15} />

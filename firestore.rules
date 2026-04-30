@@ -63,5 +63,33 @@ service cloud.firestore {
       allow write: if isAuthenticated() && profileId == request.auth.uid;
       allow write: if isAuthenticated() && hasRole('platform_admin');
     }
+
+    // 6. Notifications Collection
+    match /notifications/{notifId} {
+      // Users can only read their own notifications
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Any authenticated user can create a notification (they send it to others)
+      allow create: if isAuthenticated();
+      // Only the recipient can mark notifications as read (update)
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Recipients and admins can delete
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && hasRole('platform_admin');
+    }
+
+    // 7. Events Collection
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && (hasRole('teacher') || hasRole('institution_admin'));
+      allow update: if isAuthenticated() && resource.data.organiserId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource.data.organiserId == request.auth.uid || hasRole('platform_admin'));
+    }
+
+    // 8. Institutions Collection
+    match /institutions/{institutionId} {
+      allow read: if true;
+      allow write: if isAuthenticated() && institutionId == request.auth.uid;
+      allow write: if isAuthenticated() && hasRole('platform_admin');
+    }
   }
 }

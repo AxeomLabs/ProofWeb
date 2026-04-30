@@ -4,7 +4,8 @@ import { doc, updateDoc, setDoc, deleteDoc, collection, query, where, getDocs, a
 import { deleteUser } from 'firebase/auth';
 import { db, auth } from '../firebase/config';
 import { useNavigate } from 'react-router-dom';
-import { Edit3, Save, ExternalLink, Trash2, Plus, X, Send, CheckCircle, Clock, FileText, Users, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Edit3, Save, ExternalLink, Trash2, Plus, X, Send, CheckCircle, Clock, FileText, AlertTriangle } from 'lucide-react';
+import { sendNotification } from '../utils/notifications';
 
 const ProfilePage: React.FC = () => {
   const { user, profile } = useAuth();
@@ -269,7 +270,7 @@ const ProfilePage: React.FC = () => {
 };
 
 const StudentAssetSection = ({ achievements }: any) => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -306,6 +307,16 @@ const StudentAssetSection = ({ achievements }: any) => {
       status: 'pending', createdAt: new Date().toISOString()
     });
     await updateDoc(doc(db, 'achievements', achId), { verificationStatus: 'pending' });
+    // Notify the verifier they have a new request
+    const verifier = verifiers.find(v => v.id === selectedVerifier);
+    const verifierName = verifier ? `${verifier.firstName} ${verifier.lastName || ''}`.trim() : 'a verifier';
+    await sendNotification({
+      userId: selectedVerifier,
+      type: 'verification_requested',
+      title: 'New Verification Request',
+      message: `${profile?.firstName} ${profile?.lastName || ''} has requested verification for "${achTitle}".`,
+      meta: { achievementId: achId, achievementTitle: achTitle, requestedBy: user.uid },
+    });
     setRequestingId(null); setSelectedVerifier('');
     window.location.reload();
   };
